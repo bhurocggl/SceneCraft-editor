@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { PLYLoader } from 'three/addons/loaders/PLYLoader.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { TransformControls } from 'three/addons/controls/TransformControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { CameraIntrinsics, ThreeDAsset, AssetTransform } from '../types';
 
 interface ThreeDViewerProps {
@@ -30,33 +31,43 @@ const ThreeDViewer: React.FC<ThreeDViewerProps> = ({ assets, intrinsics, activeA
     if (!mountRef.current) return;
 
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x2d3748); // gray-800
     sceneRef.current = scene;
+    
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    rendererRef.current = renderer;
 
+    // --- Environment and Lighting Setup (based on user's suggestion) ---
+    scene.background = new THREE.Color(0x0a0a0a);
+    
+    // Use a PMREMGenerator to process the environment map for realistic lighting.
+    const pmremGenerator = new THREE.PMREMGenerator(renderer);
+    scene.environment = pmremGenerator.fromScene(new RoomEnvironment(), 0.04).texture;
+
+    // A robust lighting setup with strong key and back lights.
+    // The Y positions are inverted from the user's example to match our Y-down coordinate system.
+    const mainLight = new THREE.DirectionalLight(0xffffff, 4.0);
+    mainLight.position.set(5, -10, 7.5); // Y=-10 is "above" in a Y-down system
+    scene.add(mainLight);
+
+    const backLight = new THREE.DirectionalLight(0xffffff, 4.0);
+    backLight.position.set(-5, 10, -5); // Y=10 is "below" in a Y-down system
+    scene.add(backLight);
+    
     const camera = new THREE.PerspectiveCamera(75, mountRef.current.clientWidth / mountRef.current.clientHeight, 0.1, 1000);
     camera.position.set(0, 0, 0); // Set camera at (0, 0, 0)
     camera.lookAt(0, 0, 1)
     cameraRef.current = camera;
     scene.add(camera);
 
-    const ambientLight = new THREE.AmbientLight(0xffffff, 1.0);
-    scene.add(ambientLight);
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 1.5);
-    directionalLight.position.set(5, 10, 7.5);
-    scene.add(directionalLight);
-    const directionalLight2 = new THREE.DirectionalLight(0xffffff, 1.0);
-    directionalLight2.position.set(-5, -5, -5);
-    scene.add(directionalLight2);
-
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    // Configure renderer for a brighter, more physically correct output
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.setSize(mountRef.current.clientWidth, mountRef.current.clientHeight);
     renderer.setPixelRatio(window.devicePixelRatio);
     mountRef.current.appendChild(renderer.domElement);
-    rendererRef.current = renderer;
-
+    
     const transformControls = new TransformControls(camera, renderer.domElement);
     
-    // This handler is defined once and reused to avoid creating new functions in the render loop.
     const handleTransformChange = () => {
         if (isUpdatingProgrammatically.current) return;
         if (boundingBoxRef.current && boundingBoxRef.current.box && transformControls.object) {
@@ -92,15 +103,15 @@ const ThreeDViewer: React.FC<ThreeDViewerProps> = ({ assets, intrinsics, activeA
             switch (event.key.toLowerCase()) {
                 case 'w':
                     controls.setMode('translate');
-                    controls.setSpace('world'); // Translate in world space for intuitive movement
+                    controls.setSpace('world');
                     break;
                 case 'e':
                     controls.setMode('rotate');
-                    controls.setSpace('local'); // Rotate in local space to pivot around the object's own center
+                    controls.setSpace('local');
                     break;
                 case 'r':
                     controls.setMode('scale');
-                    controls.setSpace('local'); // Scale in local space for predictable resizing
+                    controls.setSpace('local');
                     break;
             }
         }
@@ -125,6 +136,7 @@ const ThreeDViewer: React.FC<ThreeDViewerProps> = ({ assets, intrinsics, activeA
       window.removeEventListener('keydown', handleKeyDown);
       transformControls.removeEventListener('objectChange', handleTransformChange);
       transformControls.dispose();
+      pmremGenerator.dispose();
       if (mountRef.current && rendererRef.current) {
         mountRef.current.removeChild(renderer.domElement);
       }
@@ -192,19 +204,12 @@ const ThreeDViewer: React.FC<ThreeDViewerProps> = ({ assets, intrinsics, activeA
         const onLoad = (object: THREE.Object3D) => {
             const wrapper = new THREE.Group();
             
-            // To make rotation and scaling intuitive, we set the object's pivot point
-            // to its geometric center. We calculate the center of the object's bounding box.
             const box = new THREE.Box3().setFromObject(object);
             const center = box.getCenter(new THREE.Vector3());
   
-            // We then offset the geometry inside a wrapper group so that the wrapper's 
-            // origin (which becomes the pivot point) is at the object's geometric center.
             object.position.sub(center);
             wrapper.add(object);
   
-            // Finally, we move the wrapper to the original center position. This places the
-            // object visually where it's supposed to be, while ensuring transformations
-            // are relative to its center.
             wrapper.position.copy(center);
             
             modelsRef.current.set(asset.id, wrapper);
