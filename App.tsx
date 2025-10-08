@@ -357,6 +357,7 @@ function App() {
 
     const transformsMap = new Map(sceneData.map(item => [item.id, item.transform]));
     const manifest = {
+        intrinsics: intrinsics,
         assets: [] as {fileName: string, label: string, transform: AssetTransform}[]
     };
 
@@ -411,6 +412,10 @@ function App() {
 
         if (!manifest.assets || !Array.isArray(manifest.assets)) {
             throw new Error("Invalid scene.json format.");
+        }
+
+        if (manifest.intrinsics) {
+            setIntrinsics(manifest.intrinsics as CameraIntrinsics);
         }
         
         // Clear current scene

@@ -42,7 +42,7 @@ const SidePanel: React.FC<SidePanelProps> = ({ prompt, setPrompt, serverEndpoint
 
   return (
     <div className="w-96 bg-gray-800 p-6 flex flex-col space-y-6 h-full overflow-y-auto">
-      <h1 className="text-2xl font-bold text-white">Gemini 3D Viewer</h1>
+      <h1 className="text-2xl font-bold text-white">SceneCraft Editor</h1>
 
       <div className="space-y-4">
         <div>
