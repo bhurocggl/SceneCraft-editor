@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef, ChangeEvent } from 'react';
 import { ThreeDAsset, AssetTransform, Vector3 } from '../types';
 
 interface AssetPanelProps {
@@ -10,6 +10,7 @@ interface AssetPanelProps {
   onDeleteAsset: (id: string) => void;
   onToggleVisibility: (id: string) => void;
   onSaveScene: () => void;
+  onLoadScene: (file: File) => void;
 }
 
 const TransformInput: React.FC<{ label: string; value: number; onChange: (value: number) => void; }> = ({ label, value, onChange }) => (
@@ -43,7 +44,8 @@ const TransformInputGroup: React.FC<{
 );
 
 
-const AssetPanel: React.FC<AssetPanelProps> = ({ assets, activeAssetId, onSelectAsset, activeAssetTransform, onTransformChange, onDeleteAsset, onToggleVisibility, onSaveScene }) => {
+const AssetPanel: React.FC<AssetPanelProps> = ({ assets, activeAssetId, onSelectAsset, activeAssetTransform, onTransformChange, onDeleteAsset, onToggleVisibility, onSaveScene, onLoadScene }) => {
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleTransformValueChange = (
     type: keyof AssetTransform,
@@ -56,6 +58,20 @@ const AssetPanel: React.FC<AssetPanelProps> = ({ assets, activeAssetId, onSelect
     (newTransform[type] as Vector3)[axis] = value;
     
     onTransformChange(newTransform);
+  };
+
+  const handleLoadClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      onLoadScene(file);
+    }
+    if (event.target) {
+        event.target.value = '';
+    }
   };
 
 
@@ -146,7 +162,25 @@ const AssetPanel: React.FC<AssetPanelProps> = ({ assets, activeAssetId, onSelect
         )}
       </div>
 
-      <div className="mt-4 pt-4 border-t border-gray-700">
+      <div className="mt-4 pt-4 border-t border-gray-700 space-y-2">
+        <input
+          type="file"
+          ref={fileInputRef}
+          onChange={handleFileChange}
+          accept=".zip"
+          style={{ display: 'none' }}
+          aria-hidden="true"
+        />
+        <button
+          onClick={handleLoadClick}
+          className="w-full flex justify-center items-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+            <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" />
+            <path stroke="#fff" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 11V7m0 0l-2 2m2-2l2 2" />
+          </svg>
+          Load Scene
+        </button>
         <button
           onClick={onSaveScene}
           disabled={assets.length === 0}

@@ -228,10 +228,23 @@ const ThreeDViewer: React.ForwardRefRenderFunction<ThreeDViewerRef, ThreeDViewer
             const box = new THREE.Box3().setFromObject(object);
             const center = box.getCenter(new THREE.Vector3());
   
-            object.position.sub(center);
+            object.position.sub(center); // Center the geometry inside the wrapper
             wrapper.add(object);
   
-            wrapper.position.copy(center);
+            // Apply initial transform if it exists
+            if (asset.initialTransform) {
+                const { position, rotation, scale } = asset.initialTransform;
+                wrapper.position.set(position.x, position.y, position.z);
+                wrapper.rotation.set(
+                    THREE.MathUtils.degToRad(rotation.x),
+                    THREE.MathUtils.degToRad(rotation.y),
+                    THREE.MathUtils.degToRad(rotation.z)
+                );
+                wrapper.scale.set(scale.x, scale.y, scale.z);
+            } else {
+                // If no transform, move the wrapper to the object's original center
+                wrapper.position.copy(center);
+            }
             
             modelsRef.current.set(asset.id, wrapper);
             scene.add(wrapper);

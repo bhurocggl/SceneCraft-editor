@@ -392,6 +392,70 @@ function App() {
     }
   };
 
+  const handleLoadScene = async (file: File) => {
+    if (!file) return;
+
+    setIsLoading(true);
+    setResponseParts([]);
+    
+    try {
+        const zip = await JSZip.loadAsync(file);
+        const manifestFile = zip.file("scene.json");
+        
+        if (!manifestFile) {
+            throw new Error("scene.json not found in the zip file.");
+        }
+
+        const manifestContent = await manifestFile.async("string");
+        const manifest = JSON.parse(manifestContent);
+
+        if (!manifest.assets || !Array.isArray(manifest.assets)) {
+            throw new Error("Invalid scene.json format.");
+        }
+        
+        // Clear current scene
+        setAssets([]);
+        setActiveAssetId(null);
+        setActiveAssetTransform(null);
+
+        const newAssetsPromises = manifest.assets.map(async (assetInfo: { fileName: string; label: string; transform: AssetTransform }) => {
+            const assetFile = zip.file(assetInfo.fileName);
+            if (!assetFile) {
+                console.warn(`File ${assetInfo.fileName} not found in zip, skipping.`);
+                return null;
+            }
+            
+            const fileData = await assetFile.async("blob");
+            const extension = assetInfo.fileName.split('.').pop()?.toLowerCase();
+            
+            if (extension !== 'ply' && extension !== 'glb') {
+                console.warn(`Unsupported file type for ${assetInfo.fileName}, skipping.`);
+                return null;
+            }
+
+            const newAsset: ThreeDAsset = {
+                id: crypto.randomUUID(),
+                data: fileData,
+                fileType: extension as 'ply' | 'glb',
+                label: assetInfo.label,
+                source: 'upload',
+                visible: true,
+                initialTransform: assetInfo.transform,
+            };
+            return newAsset;
+        });
+
+        const resolvedAssets = (await Promise.all(newAssetsPromises)).filter((asset): asset is ThreeDAsset => asset !== null);
+
+        setAssets(resolvedAssets);
+
+    } catch (error) {
+        console.error("Failed to load scene:", error);
+        alert(`Error loading scene: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+        setIsLoading(false);
+    }
+  };
 
   return (
     <div className="flex h-screen w-screen bg-gray-900 text-white">
@@ -461,6 +525,7 @@ function App() {
         onDeleteAsset={handleDeleteAsset}
         onToggleVisibility={handleToggleVisibility}
         onSaveScene={handleSaveScene}
+        onLoadScene={handleLoadScene}
       />
     </div>
   );

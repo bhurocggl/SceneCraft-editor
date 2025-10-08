@@ -34,6 +34,7 @@ export interface ThreeDAsset {
   label: string;
   source: 'model' | 'upload';
   visible: boolean;
+  initialTransform?: AssetTransform;
 }
 
 export interface ThreeDViewerRef {
