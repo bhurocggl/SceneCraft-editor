@@ -1,10 +1,10 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useImperativeHandle, forwardRef } from 'react';
 import * as THREE from 'three';
 import { PLYLoader } from 'three/addons/loaders/PLYLoader.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { TransformControls } from 'three/addons/controls/TransformControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
-import { CameraIntrinsics, ThreeDAsset, AssetTransform } from '../types';
+import { CameraIntrinsics, ThreeDAsset, AssetTransform, ThreeDViewerRef } from '../types';
 
 interface ThreeDViewerProps {
   assets: ThreeDAsset[];
@@ -14,7 +14,7 @@ interface ThreeDViewerProps {
   onTransformChange: (transform: AssetTransform) => void;
 }
 
-const ThreeDViewer: React.FC<ThreeDViewerProps> = ({ assets, intrinsics, activeAssetId, activeAssetTransform, onTransformChange }) => {
+const ThreeDViewer: React.ForwardRefRenderFunction<ThreeDViewerRef, ThreeDViewerProps> = ({ assets, intrinsics, activeAssetId, activeAssetTransform, onTransformChange }, ref) => {
   const mountRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
@@ -25,6 +25,27 @@ const ThreeDViewer: React.FC<ThreeDViewerProps> = ({ assets, intrinsics, activeA
   const [loadedModelIds, setLoadedModelIds] = useState<Set<string>>(new Set());
   const isUsingIntrinsicsRef = useRef(false);
   const isUpdatingProgrammatically = useRef(false);
+
+  useImperativeHandle(ref, () => ({
+    getSceneData: () => {
+      const sceneData: { id: string; transform: AssetTransform }[] = [];
+      modelsRef.current.forEach((model, id) => {
+        sceneData.push({
+          id,
+          transform: {
+            position: { x: model.position.x, y: model.position.y, z: model.position.z },
+            rotation: {
+              x: THREE.MathUtils.radToDeg(model.rotation.x),
+              y: THREE.MathUtils.radToDeg(model.rotation.y),
+              z: THREE.MathUtils.radToDeg(model.rotation.z),
+            },
+            scale: { x: model.scale.x, y: model.scale.y, z: model.scale.z },
+          },
+        });
+      });
+      return sceneData;
+    },
+  }));
 
   // Initialization
   useEffect(() => {
@@ -309,4 +330,4 @@ const ThreeDViewer: React.FC<ThreeDViewerProps> = ({ assets, intrinsics, activeA
   );
 };
 
-export default ThreeDViewer;
+export default forwardRef(ThreeDViewer);

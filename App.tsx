@@ -1,9 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import SidePanel from './components/SidePanel';
 import ThreeDViewer from './components/ThreeDViewer';
 import AssetPanel from './components/AssetPanel';
 import { queryModel } from './services/geminiService';
-import { CameraIntrinsics, GeminiPart, ThreeDAsset, AssetTransform } from './types';
+import { CameraIntrinsics, GeminiPart, ThreeDAsset, AssetTransform, ThreeDViewerRef } from './types';
+
+// Let TypeScript know that JSZip is available on the global scope
+declare const JSZip: any;
 
 const defaultIntrinsics: CameraIntrinsics = {
   image_width: 800,
@@ -173,6 +176,7 @@ function App() {
   const [assets, setAssets] = useState<ThreeDAsset[]>([]);
   const [activeAssetId, setActiveAssetId] = useState<string | null>(null);
   const [activeAssetTransform, setActiveAssetTransform] = useState<AssetTransform | null>(null);
+  const threeDViewerRef = useRef<ThreeDViewerRef>(null);
 
   const processResponse = (parts: GeminiPart[]) => {
     setResponseParts(parts);
@@ -338,6 +342,55 @@ function App() {
       )
     );
   };
+  
+  const handleSaveScene = async () => {
+    if (!threeDViewerRef.current) {
+        alert("3D Viewer is not ready.");
+        return;
+    }
+
+    const sceneData = threeDViewerRef.current.getSceneData();
+    if (sceneData.length === 0) {
+        alert("No assets in the scene to save.");
+        return;
+    }
+
+    const transformsMap = new Map(sceneData.map(item => [item.id, item.transform]));
+    const manifest = {
+        assets: [] as {fileName: string, label: string, transform: AssetTransform}[]
+    };
+
+    const zip = new JSZip();
+
+    assets.forEach(asset => {
+        const transform = transformsMap.get(asset.id);
+        if (transform) {
+            const fileName = `${asset.label.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_${asset.id.substring(0, 4)}.${asset.fileType}`;
+            manifest.assets.push({
+                fileName: fileName,
+                label: asset.label,
+                transform: transform
+            });
+            zip.file(fileName, asset.data);
+        }
+    });
+
+    zip.file("scene.json", JSON.stringify(manifest, null, 2));
+
+    try {
+        const content = await zip.generateAsync({ type: "blob" });
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(content);
+        link.download = "scenecraft-export.zip";
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(link.href);
+    } catch (error) {
+        console.error("Failed to generate zip file", error);
+        alert("Error creating scene file. See console for details.");
+    }
+  };
 
 
   return (
@@ -365,6 +418,7 @@ function App() {
             className="relative"
            >
             <ThreeDViewer 
+              ref={threeDViewerRef}
               assets={assets.filter(a => a.visible)}
               intrinsics={intrinsics}
               activeAssetId={activeAssetId}
@@ -406,6 +460,7 @@ function App() {
         onTransformChange={setActiveAssetTransform}
         onDeleteAsset={handleDeleteAsset}
         onToggleVisibility={handleToggleVisibility}
+        onSaveScene={handleSaveScene}
       />
     </div>
   );

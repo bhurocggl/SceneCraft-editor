@@ -1,4 +1,3 @@
-
 export interface Vector3 {
   x: number;
   y: number;
@@ -35,4 +34,8 @@ export interface ThreeDAsset {
   label: string;
   source: 'model' | 'upload';
   visible: boolean;
+}
+
+export interface ThreeDViewerRef {
+  getSceneData: () => { id: string; transform: AssetTransform }[];
 }
