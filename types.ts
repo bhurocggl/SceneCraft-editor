@@ -34,4 +34,5 @@ export interface ThreeDAsset {
   fileType: 'ply' | 'glb';
   label: string;
   source: 'model' | 'upload';
+  visible: boolean;
 }

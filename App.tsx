@@ -221,6 +221,7 @@ function App() {
                   fileType: assetFileType,
                   label: label || 'Generated Model',
                   source: 'model',
+                  visible: true,
                 };
                 setAssets(prevAssets => [...prevAssets, newAsset]);
                 setActiveAssetId(newAsset.id);
@@ -246,6 +247,7 @@ function App() {
               fileType: 'ply',
               label: 'Generated Model',
               source: 'model',
+              visible: true,
             };
             setAssets(prevAssets => [...prevAssets, newAsset]);
             setActiveAssetId(newAsset.id);
@@ -297,6 +299,7 @@ function App() {
           fileType: (extension === 'gltf' ? 'glb' : extension) as 'ply' | 'glb',
           label: file.name,
           source: 'upload',
+          visible: true,
         };
         newAssets.push(newAsset);
         lastValidAssetId = newAsset.id;
@@ -320,6 +323,22 @@ function App() {
       setActiveAssetTransform(null);
     }
   };
+
+  const handleDeleteAsset = (idToDelete: string) => {
+    if (activeAssetId === idToDelete) {
+      setActiveAssetId(null);
+    }
+    setAssets(prevAssets => prevAssets.filter(asset => asset.id !== idToDelete));
+  };
+
+  const handleToggleVisibility = (idToToggle: string) => {
+    setAssets(prevAssets =>
+      prevAssets.map(asset =>
+        asset.id === idToToggle ? { ...asset, visible: !asset.visible } : asset
+      )
+    );
+  };
+
 
   return (
     <div className="flex h-screen w-screen bg-gray-900 text-white">
@@ -346,7 +365,7 @@ function App() {
             className="relative"
            >
             <ThreeDViewer 
-              assets={assets}
+              assets={assets.filter(a => a.visible)}
               intrinsics={intrinsics}
               activeAssetId={activeAssetId}
               activeAssetTransform={activeAssetTransform}
@@ -385,6 +404,8 @@ function App() {
         onSelectAsset={handleSelectAsset}
         activeAssetTransform={activeAssetTransform}
         onTransformChange={setActiveAssetTransform}
+        onDeleteAsset={handleDeleteAsset}
+        onToggleVisibility={handleToggleVisibility}
       />
     </div>
   );
