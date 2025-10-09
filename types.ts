@@ -39,4 +39,5 @@ export interface ThreeDAsset {
 
 export interface ThreeDViewerRef {
   getSceneData: () => { id: string; transform: AssetTransform }[];
+  clearScene: () => void;
 }

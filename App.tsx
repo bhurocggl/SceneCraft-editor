@@ -285,6 +285,15 @@ function App() {
     if (!prompt.trim()) return;
     setIsLoading(true);
     setResponseParts([]);
+    
+    // Explicitly clear the 3D viewer first
+    if (threeDViewerRef.current) {
+      threeDViewerRef.current.clearScene();
+    }
+
+    setAssets([]);
+    setActiveAssetId(null);
+    setActiveAssetTransform(null);
     const response = await queryModel(prompt, serverEndpoint);
     processResponse(response);
     setIsLoading(false);

@@ -45,6 +45,35 @@ const ThreeDViewer: React.ForwardRefRenderFunction<ThreeDViewerRef, ThreeDViewer
       });
       return sceneData;
     },
+    clearScene: () => {
+      const scene = sceneRef.current;
+      if (!scene) return;
+
+      if (transformControlsRef.current) {
+        transformControlsRef.current.detach();
+      }
+      if (boundingBoxRef.current) {
+        scene.remove(boundingBoxRef.current);
+        boundingBoxRef.current = null;
+      }
+
+      modelsRef.current.forEach((model) => {
+        model.traverse((object) => {
+          if (object instanceof THREE.Mesh) {
+            object.geometry.dispose();
+            if (Array.isArray(object.material)) {
+              object.material.forEach((material) => material.dispose());
+            } else {
+              object.material.dispose();
+            }
+          }
+        });
+        scene.remove(model);
+      });
+
+      modelsRef.current.clear();
+      setLoadedModelIds(new Set());
+    }
   }));
 
   // Initialization
