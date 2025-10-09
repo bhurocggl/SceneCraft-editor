@@ -178,11 +178,21 @@ function App() {
   const [activeAssetTransform, setActiveAssetTransform] = useState<AssetTransform | null>(null);
   const threeDViewerRef = useRef<ThreeDViewerRef>(null);
 
+  const [sourceImage, setSourceImage] = useState<string | null>(null);
+  const [showSourceImage, setShowSourceImage] = useState<boolean>(false);
+
   const processResponse = (parts: GeminiPart[]) => {
     setResponseParts(parts);
     let newAssetCreated = false;
+    let sourceImageFound = false;
 
     parts.forEach(part => {
+      // Find the first image and set it as the source image
+      if (!sourceImageFound && part.inlineData && part.inlineData.mimeType.startsWith('image/')) {
+        setSourceImage(`data:${part.inlineData.mimeType};base64,${part.inlineData.data}`);
+        sourceImageFound = true;
+      }
+
       if (part.inlineData) {
         try {
           const mimeType = part.inlineData.mimeType;
@@ -285,6 +295,8 @@ function App() {
     if (!prompt.trim()) return;
     setIsLoading(true);
     setResponseParts([]);
+    setSourceImage(null);
+    setShowSourceImage(false);
     
     // Explicitly clear the 3D viewer first
     if (threeDViewerRef.current) {
@@ -483,6 +495,9 @@ function App() {
         onStart={handleStart}
         isLoading={isLoading}
         onFileUpload={handleFileUpload}
+        sourceImage={sourceImage}
+        showSourceImage={showSourceImage}
+        setShowSourceImage={setShowSourceImage}
       />
       <main className="flex-1 flex flex-col p-4 space-y-4">
         <div className="flex-1 bg-gray-700 rounded-lg overflow-hidden flex justify-center items-center">
@@ -497,11 +512,13 @@ function App() {
            >
             <ThreeDViewer 
               ref={threeDViewerRef}
-              assets={assets.filter(a => a.visible)}
+              assets={assets}
               intrinsics={intrinsics}
               activeAssetId={activeAssetId}
               activeAssetTransform={activeAssetTransform}
               onTransformChange={setActiveAssetTransform}
+              sourceImage={sourceImage}
+              showSourceImage={showSourceImage}
              />
            </div>
         </div>

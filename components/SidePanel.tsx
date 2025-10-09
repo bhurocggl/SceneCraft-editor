@@ -11,6 +11,9 @@ interface SidePanelProps {
   onStart: () => void;
   isLoading: boolean;
   onFileUpload: (files: File[]) => void;
+  sourceImage: string | null;
+  showSourceImage: boolean;
+  setShowSourceImage: (show: boolean) => void;
 }
 
 const IntrinsicsInput = ({ label, id, value, onChange }: { label: string; id: keyof CameraIntrinsics; value: number; onChange: (id: keyof CameraIntrinsics, value: number) => void; }) => (
@@ -28,7 +31,7 @@ const IntrinsicsInput = ({ label, id, value, onChange }: { label: string; id: ke
 );
 
 
-const SidePanel: React.FC<SidePanelProps> = ({ prompt, setPrompt, serverEndpoint, setServerEndpoint, intrinsics, setIntrinsics, onStart, isLoading, onFileUpload }) => {
+const SidePanel: React.FC<SidePanelProps> = ({ prompt, setPrompt, serverEndpoint, setServerEndpoint, intrinsics, setIntrinsics, onStart, isLoading, onFileUpload, sourceImage, showSourceImage, setShowSourceImage }) => {
   
   const handleIntrinsicsChange = (id: keyof CameraIntrinsics, value: number) => {
     setIntrinsics({ ...intrinsics, [id]: value });
@@ -78,6 +81,29 @@ const SidePanel: React.FC<SidePanelProps> = ({ prompt, setPrompt, serverEndpoint
             </svg>
           ) : 'Start'}
         </button>
+
+        {sourceImage && (
+          <div className="flex items-center justify-between pt-2">
+            <label htmlFor="show-source-image" className="text-sm font-medium text-gray-300">Show Source Image</label>
+            <button
+              type="button"
+              id="show-source-image"
+              onClick={() => setShowSourceImage(!showSourceImage)}
+              className={`${
+                showSourceImage ? 'bg-indigo-600' : 'bg-gray-600'
+              } relative inline-flex items-center h-6 rounded-full w-11 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 focus:ring-offset-gray-800`}
+              role="switch"
+              aria-checked={showSourceImage}
+            >
+              <span
+                className={`${
+                  showSourceImage ? 'translate-x-6' : 'translate-x-1'
+                } inline-block w-4 h-4 transform bg-white rounded-full transition-transform`}
+                aria-hidden="true"
+              />
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="border-t border-gray-700 pt-6">

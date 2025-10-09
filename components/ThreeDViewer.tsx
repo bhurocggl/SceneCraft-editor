@@ -12,9 +12,11 @@ interface ThreeDViewerProps {
   activeAssetId: string | null;
   activeAssetTransform: AssetTransform | null;
   onTransformChange: (transform: AssetTransform) => void;
+  sourceImage: string | null;
+  showSourceImage: boolean;
 }
 
-const ThreeDViewer: React.ForwardRefRenderFunction<ThreeDViewerRef, ThreeDViewerProps> = ({ assets, intrinsics, activeAssetId, activeAssetTransform, onTransformChange }, ref) => {
+const ThreeDViewer: React.ForwardRefRenderFunction<ThreeDViewerRef, ThreeDViewerProps> = ({ assets, intrinsics, activeAssetId, activeAssetTransform, onTransformChange, sourceImage, showSourceImage }, ref) => {
   const mountRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
@@ -83,8 +85,9 @@ const ThreeDViewer: React.ForwardRefRenderFunction<ThreeDViewerRef, ThreeDViewer
     const scene = new THREE.Scene();
     sceneRef.current = scene;
     
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     rendererRef.current = renderer;
+    renderer.setClearColor(0x000000, 0);
 
     // --- Environment and Lighting Setup (based on user's suggestion) ---
     scene.background = new THREE.Color(0x0a0a0a);
@@ -193,6 +196,27 @@ const ThreeDViewer: React.ForwardRefRenderFunction<ThreeDViewerRef, ThreeDViewer
       renderer.dispose();
     };
   }, [onTransformChange]);
+  
+  // Handle viewport background image
+  useEffect(() => {
+    const renderer = rendererRef.current;
+    const scene = sceneRef.current;
+    const mount = mountRef.current;
+    if (!renderer || !scene || !mount) return;
+
+    if (showSourceImage && sourceImage) {
+      mount.style.backgroundImage = `url(${sourceImage})`;
+      mount.style.backgroundSize = 'contain';
+      mount.style.backgroundRepeat = 'no-repeat';
+      mount.style.backgroundPosition = 'center';
+      scene.background = null;
+      renderer.setClearColor(0x000000, 0); // transparent
+    } else {
+      mount.style.backgroundImage = 'none';
+      scene.background = new THREE.Color(0x0a0a0a);
+      renderer.setClearColor(0x0a0a0a, 1); // opaque
+    }
+  }, [sourceImage, showSourceImage]);
 
   // Update camera intrinsics
   useEffect(() => {
@@ -225,12 +249,13 @@ const ThreeDViewer: React.ForwardRefRenderFunction<ThreeDViewerRef, ThreeDViewer
     }
   }, [intrinsics]);
 
-  // Load, add, and remove assets from the scene
+  // Load, add, remove, and update visibility of assets in the scene
   useEffect(() => {
     const assetIds = new Set(assets.map(a => a.id));
     const scene = sceneRef.current;
     if (!scene) return;
     
+    // Remove assets that are no longer in the assets list
     for (const [id, model] of modelsRef.current.entries()) {
       if (!assetIds.has(id)) {
         if (transformControlsRef.current?.object === model) {
@@ -246,8 +271,18 @@ const ThreeDViewer: React.ForwardRefRenderFunction<ThreeDViewerRef, ThreeDViewer
       }
     }
 
+    // Add new assets or update existing ones
     assets.forEach(asset => {
-      if (!modelsRef.current.has(asset.id)) {
+      const model = modelsRef.current.get(asset.id);
+      if (model) {
+        // Model exists, just update its visibility
+        let isVisible = asset.visible;
+        if (asset.label.toLowerCase() === 'background' && showSourceImage) {
+            isVisible = false;
+        }
+        model.visible = isVisible;
+      } else {
+        // Model doesn't exist, load it
         const url = URL.createObjectURL(asset.data);
         const onError = (error: ErrorEvent) => console.error('Error loading model:', error);
         
@@ -275,6 +310,13 @@ const ThreeDViewer: React.ForwardRefRenderFunction<ThreeDViewerRef, ThreeDViewer
                 wrapper.position.copy(center);
             }
             
+            // Set initial visibility
+            let isVisible = asset.visible;
+            if (asset.label.toLowerCase() === 'background' && showSourceImage) {
+                isVisible = false;
+            }
+            wrapper.visible = isVisible;
+
             modelsRef.current.set(asset.id, wrapper);
             scene.add(wrapper);
             URL.revokeObjectURL(url);
@@ -295,7 +337,7 @@ const ThreeDViewer: React.ForwardRefRenderFunction<ThreeDViewerRef, ThreeDViewer
         }
       }
     });
-  }, [assets]);
+  }, [assets, showSourceImage]);
 
   // Add/Update bounding box and gizmo for active asset
   useEffect(() => {
