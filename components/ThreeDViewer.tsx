@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useImperativeHandle, forwardRef } from 'react';
+import React, { useEffect, useRef, useState, useImperativeHandle, forwardRef, useCallback } from 'react';
 import * as THREE from 'three';
 import { PLYLoader } from 'three/addons/loaders/PLYLoader.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
@@ -19,7 +19,8 @@ interface ThreeDViewerProps {
 const ThreeDViewer: React.ForwardRefRenderFunction<ThreeDViewerRef, ThreeDViewerProps> = ({ assets, intrinsics, activeAssetId, activeAssetTransform, onTransformChange, sourceImage, showSourceImage }, ref) => {
   const mountRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
-  const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
+  const perspectiveCameraRef = useRef<THREE.PerspectiveCamera | null>(null);
+  const orthographicCameraRef = useRef<THREE.OrthographicCamera | null>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const modelsRef = useRef<Map<string, THREE.Object3D>>(new Map());
   const boundingBoxRef = useRef<THREE.Box3Helper | null>(null);
@@ -27,6 +28,11 @@ const ThreeDViewer: React.ForwardRefRenderFunction<ThreeDViewerRef, ThreeDViewer
   const [loadedModelIds, setLoadedModelIds] = useState<Set<string>>(new Set());
   const isUsingIntrinsicsRef = useRef(false);
   const isUpdatingProgrammatically = useRef(false);
+  const [isTopDownView, setIsTopDownView] = useState(false);
+  const isTopDownViewRef = useRef(isTopDownView);
+  isTopDownViewRef.current = isTopDownView;
+  const savedCameraStateRef = useRef<{position: THREE.Vector3, rotation: THREE.Euler} | null>(null);
+
 
   useImperativeHandle(ref, () => ({
     getSceneData: () => {
@@ -106,11 +112,16 @@ const ThreeDViewer: React.ForwardRefRenderFunction<ThreeDViewerRef, ThreeDViewer
     backLight.position.set(-5, 10, -5); // Y=10 is "below" in a Y-down system
     scene.add(backLight);
     
-    const camera = new THREE.PerspectiveCamera(75, mountRef.current.clientWidth / mountRef.current.clientHeight, 0.1, 1000);
-    camera.position.set(0, 0, 0); // Set camera at (0, 0, 0)
-    camera.lookAt(0, 0, 1)
-    cameraRef.current = camera;
-    scene.add(camera);
+    const perspectiveCamera = new THREE.PerspectiveCamera(75, mountRef.current.clientWidth / mountRef.current.clientHeight, 0.1, 1000);
+    perspectiveCamera.position.set(0, 0, 0); // Set camera at (0, 0, 0)
+    perspectiveCamera.lookAt(0, 0, 1)
+    perspectiveCameraRef.current = perspectiveCamera;
+    scene.add(perspectiveCamera);
+
+    const orthographicCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 2000);
+    orthographicCamera.up.set(0, 0, 1); // Orient correctly for top-down view
+    orthographicCameraRef.current = orthographicCamera;
+    scene.add(orthographicCamera);
 
     // Configure renderer for a brighter, more physically correct output
     renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -119,7 +130,7 @@ const ThreeDViewer: React.ForwardRefRenderFunction<ThreeDViewerRef, ThreeDViewer
     renderer.setPixelRatio(window.devicePixelRatio);
     mountRef.current.appendChild(renderer.domElement);
     
-    const transformControls = new TransformControls(camera, renderer.domElement);
+    const transformControls = new TransformControls(perspectiveCamera, renderer.domElement);
     
     const handleTransformChange = () => {
         if (isUpdatingProgrammatically.current) return;
@@ -146,7 +157,10 @@ const ThreeDViewer: React.ForwardRefRenderFunction<ThreeDViewerRef, ThreeDViewer
 
     const animate = () => {
       requestAnimationFrame(animate);
-      renderer.render(scene, camera);
+      const camera = isTopDownViewRef.current ? orthographicCameraRef.current : perspectiveCameraRef.current;
+      if (renderer && scene && camera) {
+        renderer.render(scene, camera);
+      }
     };
     animate();
 
@@ -172,13 +186,27 @@ const ThreeDViewer: React.ForwardRefRenderFunction<ThreeDViewerRef, ThreeDViewer
     window.addEventListener('keydown', handleKeyDown);
 
     const handleResize = () => {
-      if (mountRef.current && rendererRef.current && cameraRef.current) {
+      if (mountRef.current && rendererRef.current) {
         const width = mountRef.current.clientWidth;
         const height = mountRef.current.clientHeight;
         rendererRef.current.setSize(width, height);
-        if (!isUsingIntrinsicsRef.current) {
-            cameraRef.current.aspect = width / height;
-            cameraRef.current.updateProjectionMatrix();
+        
+        if (isTopDownViewRef.current) {
+            const orthoCam = orthographicCameraRef.current;
+            if (orthoCam) {
+                const newAspect = width / height;
+                const currentHeight = orthoCam.top - orthoCam.bottom;
+                const newWidth = currentHeight * newAspect;
+                orthoCam.left = -newWidth / 2;
+                orthoCam.right = newWidth / 2;
+                orthoCam.updateProjectionMatrix();
+            }
+        } else if (!isUsingIntrinsicsRef.current) {
+            const pCam = perspectiveCameraRef.current;
+            if (pCam) {
+              pCam.aspect = width / height;
+              pCam.updateProjectionMatrix();
+            }
         }
       }
     };
@@ -196,6 +224,76 @@ const ThreeDViewer: React.ForwardRefRenderFunction<ThreeDViewerRef, ThreeDViewer
       renderer.dispose();
     };
   }, [onTransformChange]);
+
+  // Handle camera view mode (Perspective vs Top-Down Orthographic)
+  useEffect(() => {
+    const controls = transformControlsRef.current;
+    const perspectiveCamera = perspectiveCameraRef.current;
+    const orthographicCamera = orthographicCameraRef.current;
+    const mount = mountRef.current;
+
+    if (!controls || !perspectiveCamera || !orthographicCamera || !mount) return;
+
+    if (isTopDownView) {
+      // Save current perspective camera state if it's not already saved
+      if (!savedCameraStateRef.current) {
+        savedCameraStateRef.current = {
+          position: perspectiveCamera.position.clone(),
+          rotation: perspectiveCamera.rotation.clone(),
+        };
+      }
+
+      // Calculate scene bounding box
+      const sceneBounds = new THREE.Box3();
+      modelsRef.current.forEach(model => {
+        if (model.visible) { // Only consider visible models
+            sceneBounds.expandByObject(model);
+        }
+      });
+
+      if (sceneBounds.isEmpty()) {
+        sceneBounds.set(new THREE.Vector3(-1, -1, -1), new THREE.Vector3(1, 1, 1));
+      }
+
+      const center = sceneBounds.getCenter(new THREE.Vector3());
+      const size = sceneBounds.getSize(new THREE.Vector3());
+      const maxDim = Math.max(size.x, size.z);
+      const aspect = mount.clientWidth / mount.clientHeight;
+      const padding = 1.2;
+
+      let camWidth, camHeight;
+      if (aspect >= 1) { // Landscape
+        camHeight = maxDim * padding;
+        camWidth = camHeight * aspect;
+      } else { // Portrait
+        camWidth = maxDim * padding;
+        camHeight = camWidth / aspect;
+      }
+
+      orthographicCamera.left = -camWidth / 2;
+      orthographicCamera.right = camWidth / 2;
+      orthographicCamera.top = camHeight / 2;
+      orthographicCamera.bottom = -camHeight / 2;
+
+      // Position camera high above the scene's center (Y is down)
+      const cameraY = center.y - Math.max(size.y * 2, maxDim * 2); 
+      orthographicCamera.position.set(center.x, cameraY, center.z);
+      orthographicCamera.lookAt(center.x, center.y, center.z);
+      orthographicCamera.updateProjectionMatrix();
+
+      controls.camera = orthographicCamera;
+
+    } else {
+      // Restore perspective camera
+      if (savedCameraStateRef.current) {
+        perspectiveCamera.position.copy(savedCameraStateRef.current.position);
+        perspectiveCamera.rotation.copy(savedCameraStateRef.current.rotation);
+        savedCameraStateRef.current = null; // Clear saved state
+      }
+      controls.camera = perspectiveCamera;
+    }
+
+  }, [isTopDownView, assets, loadedModelIds]); // Re-run when assets change to re-frame the view
   
   // Handle viewport background image
   useEffect(() => {
@@ -220,9 +318,9 @@ const ThreeDViewer: React.ForwardRefRenderFunction<ThreeDViewerRef, ThreeDViewer
 
   // Update camera intrinsics
   useEffect(() => {
-    if (!cameraRef.current) return;
+    if (!perspectiveCameraRef.current) return;
     const { image_width: width, image_height: height, fx, fy, cx, cy } = intrinsics;
-    const camera = cameraRef.current;
+    const camera = perspectiveCameraRef.current;
 
     if (fx > 0 && fy > 0 && width > 0 && height > 0) {
         const near = 0.1;
@@ -390,6 +488,11 @@ const ThreeDViewer: React.ForwardRefRenderFunction<ThreeDViewerRef, ThreeDViewer
           );
           model.scale.set(activeAssetTransform.scale.x, activeAssetTransform.scale.y, activeAssetTransform.scale.z);
           
+          // Explicitly update the world matrix after programmatic changes.
+          // This ensures that the TransformControls gizmo and any subsequent operations
+          // are based on the most up-to-date transformation data.
+          model.updateMatrixWorld(true);
+
           if (boundingBoxRef.current) {
               boundingBoxRef.current.box.setFromObject(model);
           }
@@ -410,6 +513,19 @@ const ThreeDViewer: React.ForwardRefRenderFunction<ThreeDViewerRef, ThreeDViewer
         <div><strong>E</strong>: Rotate (Local)</div>
         <div><strong>R</strong>: Scale (Local)</div>
       </div>
+      <button
+        onClick={() => setIsTopDownView(!isTopDownView)}
+        className={`absolute top-2 right-2 p-2 rounded-md transition-colors hover:bg-indigo-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 focus:ring-offset-gray-800 ${
+          isTopDownView ? 'bg-indigo-600' : 'bg-gray-900 bg-opacity-70'
+        }`}
+        title="Toggle Top-Down View"
+        aria-pressed={isTopDownView}
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M17 10V3H7v7l5 5 5-5z" />
+            <path strokeLinecap="round" strokeLinejoin="round" d="M3 17v4h18v-4" />
+        </svg>
+      </button>
     </div>
   );
 };
